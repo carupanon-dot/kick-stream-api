@@ -9,7 +9,9 @@ app.use(cors({
 }));
 
 app.get('/api/stream/:channel', async (req, res) => {
-    const channel = req.params.channel.replace('https://kick.com/', '').replace('/', '').trim();
+    let rawChannel = req.params.channel;
+    // Limpiamos la URL por si acaso envían el enlace completo o texto con espacios
+    const channel = rawChannel.replace('https://kick.com/', '').split('?')[0].split('/')[0].trim();
     
     try {
         const response = await fetch(`https://kick.com/api/v1/channels/${channel}`, {
@@ -20,7 +22,7 @@ app.get('/api/stream/:channel', async (req, res) => {
         });
         
         if (!response.ok) {
-            return res.status(404).json({ error: 'Canal no encontrado o en diferido/offline' });
+            return res.status(404).json({ error: `Canal '${channel}' offline o no existe` });
         }
         
         const data = await response.json();
@@ -32,13 +34,12 @@ app.get('/api/stream/:channel', async (req, res) => {
                 playback_url: data.playback_url 
             });
         } else {
-            return res.status(404).json({ error: 'Playback URL no disponible' });
+            return res.status(404).json({ error: 'Playback URL no disponible en este momento' });
         }
     } catch (error) {
-        return res.status(500).json({ error: 'Error interno en el servidor proxy', details: error.message });
+        return res.status(500).json({ error: 'Error en el servidor proxy', details: error.message });
     }
 });
-
 app.get('/', (req, res) => {
     res.json({ status: 'API Proxy Activa' });
 });
