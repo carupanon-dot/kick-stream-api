@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reproductor de Transmisiones en Vivo</title>
+    <!-- Cargamos la librería hls.js -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .video-container {
+            width: 90%;
+            max-width: 1000px;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .status {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="video-container">
+        <video id="videoPlayer" controls autoplay muted playsinline></video>
+    </div>
+    <div class="status" id="statusMessage">Cargando transmisión...</div>
+
+    <script>
+        // CONFIGURACIÓN
+        const CANAL_KICK = 'ColocaAquiElCanal'; // Reemplaza por el nombre del canal de Kick
+        const API_URL = `https://kick-stream-api.onrender.com/api/stream/${CANAL_KICK}`;
+
+        const video = document.getElementById('videoPlayer');
+        const statusMsg = document.getElementById('statusMessage');
+        let hlsInstance = null;
+
+        function cargarStream() {
+            statusMsg.innerText = "Obteniendo enlace dinámico de la API...";
+
+            fetch(API_URL)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("El canal está offline o no se encontró.");
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data.playback_url) {
+                        throw new Error("No se obtuvo la URL de reproducción.");
+                    }
+
+                    const streamUrl = data.playback_url;
+                    statusMsg.innerText = "Conectando al stream en vivo...";
+
+                    if (Hls.isSupported()) {
+                        if (hlsInstance) {
+                            hlsInstance.destroy(); // Limpiar instancia previa si existía
+                        }
+
+                        hlsInstance = new Hls({
+                            liveSyncDurationCount: 3,
+                            enableWorker: true,
+                            lowLatencyMode: true
+                        });
+
+                        hlsInstance.loadSource(streamUrl);
+                        hlsInstance.attachMedia(video);
+
+                        hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+                            statusMsg.innerText = "Transmisión en vivo iniciada.";
+                            video.play().catch(err => {
+                                statusMsg.innerText = "Haz clic en el reproductor para iniciar el audio/video.";
+                            });
+                        });
+
+                        // Manejo de errores para evitar congelamientos
+                        hlsInstance.on(Hls.Events.ERROR, function (event, data) {
+                            if (data.fatal) {
+                                switch (data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        statusMsg.innerText = "Error de red. Intentando reconectar...";
+                                        hlsInstance.startLoad();
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        statusMsg.innerText = "Recuperando flujo de video...";
+                                        hlsInstance.recoverMediaError();
+                                        break;
+                                    default:
+                                        statusMsg.innerText = "Token o conexión expirada. Renovando...";
+                                        setTimeout(cargarStream, 3000); // Volver a consultar la API
+                                        break;
+                                }
+                            }
+                        });
+
+                    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        // Para navegadores con HLS nativo (Safari)
+                        video.src = streamUrl;
+                        video.addEventListener('loadedmetadata', function () {
+                            video.play();
+                            statusMsg.innerText = "Transmisión en vivo iniciada.";
+                        });
+                    } else {
+                        statusMsg.innerText = "Tu navegador no soporta reproducción HLS.";
+                    }
+                })
+                .catch(error => {
+                    statusMsg.innerText = `Error: ${error.message}`;
+                    // Reintentar en 10 segundos si falla
+                    setTimeout(cargarStream, 10000);
+                });
+        }
+
+        // Iniciar la carga
+        cargarStream();
+    </script>
+</body>
+</html>
