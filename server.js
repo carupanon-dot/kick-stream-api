@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
+// Habilitar CORS para permitir peticiones desde cualquier origen (tu web)
 app.use(cors());
 
 app.get('/api/stream/:channel', async (req, res) => {
@@ -19,8 +20,13 @@ app.get('/api/stream/:channel', async (req, res) => {
         }
         
         const data = await response.json();
+        
         if (data && data.playback_url) {
-            return res.redirect(data.playback_url);
+            // Devolvemos la URL del HLS maestro en un objeto JSON
+            return res.json({ 
+                channel: channel,
+                playback_url: data.playback_url 
+            });
         } else {
             return res.status(404).json({ error: 'Playback URL no disponible para este canal' });
         }
